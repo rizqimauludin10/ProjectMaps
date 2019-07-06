@@ -17,18 +17,24 @@ import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.LocationSettingsResult;
 import com.google.android.gms.location.SettingsClient;
+import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.libraries.places.api.Places;
 import com.google.android.libraries.places.api.model.AutocompletePrediction;
+import com.google.android.libraries.places.api.model.AutocompleteSessionToken;
 import com.google.android.libraries.places.api.net.PlacesClient;
 import com.mancj.materialsearchbar.MaterialSearchBar;
 
@@ -46,7 +52,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private View mapView;
 
     private MaterialSearchBar materialSearchBar;
-    private final float DEFAULT_ZOOM = 18;
+    private final float DEFAULT_ZOOM = 15;
 
 
     @Override
@@ -60,6 +66,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mapFragment.getMapAsync(this);
         mapView = mapFragment.getView();
 
+        mFusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(MapsActivity.this);
+        Places.initialize(MapsActivity.this, "AIzaSyB6eSue5JEk-Un_bNSxomc-2x5gygGbCpM");
+        placesClient = Places.createClient(this);
+        AutocompleteSessionToken token = AutocompleteSessionToken.newInstance();
 
     }
 
@@ -93,7 +103,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             task.addOnSuccessListener(MapsActivity.this, new OnSuccessListener<LocationSettingsResponse>() {
                 @Override
                 public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
-
+                    getDeviceLocation();
                 }
             });
 
@@ -124,8 +134,39 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
+    @SuppressLint("MissingPermission")
     private void getDeviceLocation() {
+        mFusedLocationProviderClient.getLastLocation()
+                .addOnCompleteListener(new OnCompleteListener<Location>() {
+                    @Override
+                    public void onComplete(@NonNull Task<Location> task) {
+                        if (task.isSuccessful()) {
+                            mLastKnownLocation = task.getResult();
+                            if (mLastKnownLocation != null ) {
+                                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude()), DEFAULT_ZOOM));
+                            } else {
+                                final LocationRequest locationRequest = LocationRequest.create();
+                                locationRequest.setInterval(10000);
+                                locationRequest.setFastestInterval(5000);
+                                locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+                                locationCallback = new LocationCallback() {
+                                    @Override
+                                    public void onLocationResult(LocationResult locationResult) {
+                                        super.onLocationResult(locationResult);
+                                        if (locationResult == null) {
+                                            return;
+                                        }
+                                        mLastKnownLocation = locationResult.getLastLocation();
+                                        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude()), DEFAULT_ZOOM));
+                                        mFusedLocationProviderClient.removeLocationUpdates(locationCallback);
+                                    }
+                                };
+                                mFusedLocationProviderClient.requestLocationUpdates(locationRequest, locationCallback, null);
+                            }
+                        }
 
+                    }
+                });
 
     }
 }
